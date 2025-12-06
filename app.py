@@ -466,31 +466,39 @@ def uploaded_chunks():
 @login_required
 def complete_upload():
     data = request.get_json(force=True)
-    upload_id = data.get("upload_id","").strip()
+    upload_id = data.get("upload_id", "").strip()
     if not upload_id:
-        return jsonify({"error":"missing"}), 400
-    found = None; found_user = None
+        return jsonify({"error": "missing"}), 400
+
+    found = None
+    found_user = None
     for possible_user in os.listdir(UPLOAD_TMP_ROOT):
         tmpdir = os.path.join(UPLOAD_TMP_ROOT, possible_user, upload_id)
         if os.path.isdir(tmpdir):
             found = tmpdir
             found_user = possible_user
             break
+
     if not found:
-        return jsonify({"error":"not_found"}), 404
+        return jsonify({"error": "not_found"}), 404
+
     meta_path = os.path.join(found, "meta.json")
     if not os.path.isfile(meta_path):
-        return jsonify({"error":"meta_missing"}), 404
+        return jsonify({"error": "meta_missing"}), 404
+
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
+
     filename = meta.get("filename")
     total_size = int(meta.get("total_size", 0))
-    folder = meta.get("folder","")
+    folder = meta.get("folder", "")
     overwrite = bool(meta.get("overwrite", False))
+
     try:
         target_folder_abs = ensure_user_subpath(found_user, folder)
     except ValueError:
-        return jsonify({"error":"invalid_folder"}), 400
+        return jsonify({"error": "invalid_folder"}), 400
+
     final_path = os.path.join(target_folder_abs, filename)
     if os.path.exists(final_path):
         if overwrite:
@@ -502,60 +510,85 @@ def complete_upload():
             base, ext = os.path.splitext(filename)
             filename = f"{base}_{int(datetime.utcnow().timestamp())}{ext}"
             final_path = os.path.join(target_folder_abs, filename)
+
+    # gather chunk files
     chunk_files = sorted([f for f in os.listdir(found) if f.startswith("chunk_")])
     if not chunk_files:
-        return jsonify({"error":"no_chunks"}), 400
+        return jsonify({"error": "no_chunks"}), 400
+
+    # assemble file
     with open(final_path + ".part", "wb") as out_f:
         for cf in chunk_files:
-            with open(os.path.join(found, cf), "rb") as r:
+            cf_path = os.path.join(found, cf)
+            with open(cf_path, "rb") as r:
                 shutil.copyfileobj(r, out_f)
+
     try:
         final_size = os.path.getsize(final_path + ".part")
     except:
         final_size = 0
+
     if final_size != total_size:
         try:
             os.remove(final_path + ".part")
         except:
             pass
-        return jsonify({"error":"size_mismatch", "final_size": final_size, "expected": total_size}), 500
-os.replace(final_path + ".part", final_path)
+        return jsonify({"error": "size_mismatch", "final_size": final_size, "expected": total_size}), 500
 
-# Build S3 object key: user/folder/file.ext
-folder_clean = folder.strip("/ ")
-if folder_clean:
-    object_key = f"{found_user}/{folder_clean}/{filename}"
-else:
-    object_key = f"{found_user}/{filename}"
+    # move the .part to final path
+    os.replace(final_path + ".part", final_path)
 
-object_key = object_key.replace("//", "/")
+    # build s3 object key and upload if enabled
+    s3_object_key = None
+    if USE_S3:
+        folder_clean = folder.strip("/ ")
+        if folder_clean:
+            s3_object_key = f"{found_user}/{folder_clean}/{filename}"
+        else:
+            s3_object_key = f"{found_user}/{filename}"
+        s3_object_key = s3_object_key.replace("//", "/")
 
-# Upload to S3
-if USE_S3:
-    ok = upload_to_s3(final_path, object_key)
-    if not ok:
-        return jsonify({"error": "s3_upload_failed"}), 500
+        try:
+            ok = upload_to_s3(final_path, s3_object_key)
+        except Exception as e:
+            app.logger.exception("S3 upload failed")
+            # cleanup temp folder (keep local final file so you can inspect)
+            try:
+                shutil.rmtree(found)
+            except:
+                pass
+            return jsonify({"error": "s3_upload_failed", "msg": str(e)}), 500
 
-    # Delete local file after upload
+        if not ok:
+            # upload_to_s3 returns False on failure (non-exception)
+            try:
+                shutil.rmtree(found)
+            except:
+                pass
+            return jsonify({"error": "s3_upload_failed"}), 500
+
+        # remove local copy after successful upload to save disk
+        try:
+            os.remove(final_path)
+        except:
+            pass
+
+    # clean up tmp chunks
     try:
-        os.remove(final_path)
+        shutil.rmtree(found)
     except:
         pass
 
-# Remove temp folder
-try:
-    shutil.rmtree(found)
-except:
-    pass
+    # respond with s3 info if applicable
+    return jsonify({
+        "ok": True,
+        "filename": filename,
+        "folder": folder,
+        "username": found_user,
+        "s3_key": s3_object_key,
+        "s3_url": get_s3_url(s3_object_key) if USE_S3 and s3_object_key else None
+    })
 
-return jsonify({
-    "ok": True,
-    "filename": filename,
-    "folder": folder,
-    "username": found_user,
-    "s3_key": object_key,
-    "s3_url": get_s3_url(object_key)
-})
 
 
 @app.route("/abort_upload", methods=["POST"])
