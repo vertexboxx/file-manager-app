@@ -3,7 +3,11 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import sqlite3, os, json, shutil, mimetypes, re, uuid
+# put near top of app.py with other imports
 import boto3
+from botocore.exceptions import ClientError
+import math
+
 from datetime import datetime
 
 USE_S3 = True
@@ -385,64 +389,80 @@ def create_folder():
     return redirect(url_for("files_view", folder=parent, as_user=target_user) if session.get("role") == "admin" else redirect(url_for("files_view", folder=parent)))
 
 # --- Delete & Rename ---
+# Replace your delete_item route with this implementation
 @app.route("/delete", methods=["POST"])
 @login_required
 def delete_item():
+    """
+    Expects JSON:
+    { "path": "<relative path or filename>", "recursive": <bool>, "as_user": "<username?>" }
+    Deletes local file/dir and corresponding S3 objects under "<username>/<path>".
+    """
     data = request.get_json(force=True)
-    path = data.get("path", "").strip()
+    path = (data.get("path","") or "").strip()
     recursive = bool(data.get("recursive", False))
     as_user = data.get("as_user") if session.get("role") == "admin" else None
     target_user = as_user if as_user else session.get("username")
 
     if not path:
-        return jsonify({"error": "missing"}), 400
+        return jsonify({"error":"missing"}), 400
 
-    # Normalize path and build s3 key/prefix
-    safe_path = sanitize_folder(path)
-    # If the path looks like a folder (no extension) or recursive true, treat as prefix
-    is_folder_like = not os.path.splitext(safe_path)[1]
-    prefix = f"{target_user}/{safe_path}".rstrip("/")
-    if not prefix:
-        prefix = f"{target_user}"
-
-    # create s3 client
-    AWS_REGION = os.environ.get("AWS_REGION")
-    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    S3_BUCKET = os.environ.get("S3_BUCKET")
-    s3 = boto3.client(
-        "s3",
-        region_name=AWS_REGION,
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    )
-
+    # Ensure path is safe and within user's root
     try:
-        # If deleting a folder (or recursive requested), remove all objects under prefix
-        if recursive or is_folder_like:
-            # Ensure prefix ends with '/'
-            prefix_key = prefix + "/"
-            # list objects
-            resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix_key)
-            if "Contents" not in resp:
-                return jsonify({"error": "not_found"}), 404
-            # batch delete (max 1000 per call)
-            to_delete = [{"Key": o["Key"]} for o in resp["Contents"]]
-            s3.delete_objects(Bucket=S3_BUCKET, Delete={"Objects": to_delete})
-            return jsonify({"ok": True})
-        else:
-            # single file delete
-            object_key = prefix  # already user/relpath/file.ext
-            # verify object exists (optional)
-            try:
-                s3.head_object(Bucket=S3_BUCKET, Key=object_key)
-            except Exception:
-                return jsonify({"error": "not_found"}), 404
-            s3.delete_object(Bucket=S3_BUCKET, Key=object_key)
-            return jsonify({"ok": True})
+        abs_path = ensure_user_subpath(target_user, path)
+    except ValueError:
+        return jsonify({"error":"invalid_path"}), 400
+
+    # Build S3 prefix - we store objects under "<username>/<path>"
+    # If path is a folder, want "<username>/<folder>/" prefix to match objects under it.
+    s3_prefix = f"{target_user}/{path}".lstrip("/")
+    # normalize: if path looks like a folder (ends with slash) or os.path.isdir locally, ensure trailing slash
+    if not s3_prefix.endswith("/") and os.path.isdir(abs_path):
+        s3_prefix = s3_prefix.rstrip("/") + "/"
+
+    # If the exact file object exists in S3 use exact key deletion; our delete_from_s3 will delete any matching keys under the prefix.
+    print(f"delete_item: user={target_user}, path={path}, abs_path={abs_path}, s3_prefix={s3_prefix}, recursive={recursive}")
+
+    # First try delete from S3 (best-effort)
+    deleted_s3 = False
+    try:
+        deleted_s3 = delete_from_s3(s3_prefix)
     except Exception as e:
-        app.logger.exception("S3 delete failed")
-        return jsonify({"error": "delete_failed", "msg": str(e)}), 500
+        print("delete_item: delete_from_s3 failed:", e)
+        deleted_s3 = False
+
+    # Then delete from local filesystem if present
+    try:
+        if os.path.isdir(abs_path):
+            if recursive:
+                shutil.rmtree(abs_path, ignore_errors=True)
+                local_deleted = True
+            else:
+                try:
+                    os.rmdir(abs_path)
+                    local_deleted = True
+                except OSError:
+                    local_deleted = False
+                    # folder not empty
+        else:
+            # file
+            try:
+                os.remove(abs_path)
+                local_deleted = True
+            except OSError:
+                local_deleted = False
+    except Exception as e:
+        print("delete_item: local delete error:", e)
+        local_deleted = False
+
+    # Decide response:
+    # - If either S3 or local deletion succeeded, return ok.
+    # - If neither succeeded, return not_found.
+    if deleted_s3 or local_deleted:
+        return jsonify({"ok": True})
+    else:
+        # Could be not found in both locations or permission issues
+        return jsonify({"error": "not_found"}), 404
 
 @app.route("/rename", methods=["POST"])
 @login_required
@@ -689,6 +709,46 @@ def complete_upload():
         "s3_url": get_s3_url(s3_object_key) if USE_S3 and s3_object_key else None
     })
 
+@app.route("/preview/<path:filename>")
+@login_required
+def preview_file(filename):
+    as_user = request.args.get("as_user") if session.get("role") == "admin" else None
+    target_user = as_user if as_user else session.get("username")
+
+    # sanitize folder/file path
+    try:
+        ensure_user_subpath(target_user, filename)
+    except ValueError:
+        return "Invalid path", 400
+
+    object_key = f"{target_user}/{filename}".lstrip("/")
+
+    AWS_REGION = os.environ.get("AWS_REGION")
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    S3_BUCKET = os.environ.get("S3_BUCKET")
+
+    s3 = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
+    try:
+        presigned = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": S3_BUCKET,
+                "Key": object_key,
+                "ResponseContentDisposition": "inline"
+            },
+            ExpiresIn=300,  # 5 minutes preview expiry
+        )
+        return redirect(presigned)
+    except Exception as e:
+        app.logger.exception("Preview failed")
+        return "Preview failed", 500
 
 
 @app.route("/abort_upload", methods=["POST"])

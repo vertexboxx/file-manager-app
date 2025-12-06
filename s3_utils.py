@@ -26,6 +26,32 @@ def upload_to_s3(local_path, object_key):
         print("S3 upload error:", e)
         return False
 
+def delete_from_s3(prefix):
+    try:
+        print("Attempting S3 delete for prefix:", prefix)
+
+        resp = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefix)
+
+        print("S3 LIST RESPONSE:", resp)
+
+        if 'Contents' not in resp:
+            print("NOT FOUND IN S3")
+            return False
+
+        to_delete = [{"Key": obj["Key"]} for obj in resp["Contents"]]
+
+        print("DELETING:", to_delete)
+
+        s3_client.delete_objects(
+            Bucket=BUCKET_NAME,
+            Delete={"Objects": to_delete}
+        )
+        return True
+
+    except Exception as e:
+        print("Delete error:", e)
+        return False
+
 def get_s3_url(object_key):
     """Return a simple public S3 URL for the object (or None if no key)."""
     if not object_key:
