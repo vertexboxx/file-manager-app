@@ -1,0 +1,5 @@
+
+body { background-color: #f5f7fb; }
+.thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; cursor: pointer; }
+.progress-small { height: 12px; }
+.upload-item { margin-bottom: 10px; }

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload - File Manager</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet">
+</head><body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">📂 File Manager</a>
+    <div class="d-flex align-items-center">
+      <span class="text-light me-3">Signed in as {{ username }}{% if session.role == 'admin' %} (admin){% endif %}</span>
+      <a class="btn btn-outline-light btn-sm me-2" href="/files">Files</a>
+      <a class="btn btn-light btn-sm" href="/logout">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4">
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card p-3">
+        <h4 class="mb-3">Upload Files</h4>
+        <p class="text-muted small">Used: {{ human_readable(usage) }} / {{ human_readable(quota) }}</p>
+
+        {% if users %}
+        <div class="mb-2">
+          <label class="form-label">Upload as (admin)</label>
+          <select id="asUserSelect" class="form-select">
+            <option value="{{ username }}">{{ username }} (me)</option>
+            {% for u in users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <div class="mb-2">
+          <label class="form-label">Target folder</label>
+          <select id="folderSelect" class="form-select"><option value="">/ (root)</option>{% for f in folders %}<option value="{{ f }}">{{ '/' + f if f else '/' }}</option>{% endfor %}</select>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Create new folder inside selected</label>
+          <div class="input-group">
+            <input id="newFolderName" class="form-control" placeholder="New folder name">
+            <button id="createFolderBtn" class="btn btn-outline-primary">Create</button>
+          </div>
+        </div>
+
+        <div class="mb-2 form-check">
+          <input class="form-check-input" type="checkbox" id="overwriteCheck">
+          <label class="form-check-label" for="overwriteCheck">Overwrite if file exists</label>
+        </div>
+
+        <div class="mb-3">
+          <input type="file" id="fileInput" multiple class="form-control">
+        </div>
+
+        <div id="uploadsList"></div>
+        <div class="mt-3"><a href="/files" class="btn btn-outline-secondary btn-sm">Manage uploaded files</a></div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card p-3">
+        <h6>Quick Tips</h6>
+        <ul>
+          <li>Use wired connection for best performance.</li>
+          <li>Chunked uploads allow resuming and parallel transfers.</li>
+          <li>Preview images and videos directly from the files page.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Credits Section -->
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>const USER = "{{ username }}";</script>
+<script src="{{ url_for('static', filename='js/upload_manager.js') }}"></script>
+</body></html>

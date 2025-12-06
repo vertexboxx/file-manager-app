@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Files</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet">
+</head><body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary"><div class="container-fluid"><a class="navbar-brand" href="/">📂 File Manager</a>
+<div class="d-flex align-items-center"><span class="text-light me-3">Signed in as {{ username }}{% if session.role=='admin' %} (admin){% endif %}</span><a class="btn btn-outline-light btn-sm me-2" href="/">Upload</a><a class="btn btn-light btn-sm" href="/logout">Logout</a></div></div></nav>
+
+<main class="container my-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="m-0">Files {{ '/' + current_folder if current_folder else '' }}</h4>
+    {% if breadcrumbs %}<small class="text-muted">Path: <a href="{{ url_for('files_view') }}">/</a>{% for name,path in breadcrumbs %} / <a href="{{ url_for('files_view', folder=path, as_user=view_user if view_user!=username else None) }}">{{name}}</a>{% endfor %}</small>{% endif %}
+  </div>
+  <div class="d-flex">
+    <form class="me-2" method="GET" action="{{ url_for('files_view') }}">
+      <input type="hidden" name="folder" value="{{ current_folder }}">
+      {% if session.role=='admin' %}<select name="as_user" class="form-select form-select-sm d-inline-block" style="width:140px">{% for u in users %}<option value="{{u}}" {% if u==view_user %}selected{% endif %}>{{u}}</option>{% endfor %}</select>{% endif %}
+      <div class="input-group">
+        <input name="q" class="form-control" placeholder="Search" value="{{ request.args.get('q','') }}">
+        <select name="type" class="form-select"><option value="">All</option><option value="image" {% if request.args.get('type')=='image' %}selected{% endif %}>Images</option><option value="video" {% if request.args.get('type')=='video' %}selected{% endif %}>Videos</option><option value="docs" {% if request.args.get('type')=='docs' %}selected{% endif %}>Docs</option></select>
+        <input name="min_size" class="form-control" placeholder="min bytes" value="{{ request.args.get('min_size','') }}">
+        <input name="max_size" class="form-control" placeholder="max bytes" value="{{ request.args.get('max_size','') }}">
+        <button class="btn btn-primary">Search</button>
+      </div>
+    </form>
+    <div class="ms-2"><a class="btn btn-sm btn-success" href="{{ url_for('download_all', folder=current_folder, as_user=view_user if view_user!=username else None) }}">⬇️ Download All</a></div>
+  </div>
+</div>
+
+<div class="mb-3">
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('files_view', folder=parent, as_user=view_user if view_user!=username else None) }}">Go to parent</a>
+  <form id="createFolderForm" class="d-inline ms-2" method="POST" action="{{ url_for('create_folder') }}">
+    <input type="hidden" name="parent" value="{{ current_folder }}">
+    {% if session.role=='admin' %}<input type="hidden" name="as_user" value="{{ view_user }}">{% endif %}
+    <input name="name" placeholder="New folder name" class="form-control d-inline-block" style="width:220px;">
+    <button class="btn btn-sm btn-outline-primary">Create</button>
+  </form>
+</div>
+
+<div class="row">
+  <div class="col-md-4"><div class="card p-2 mb-3"><h6>Folders</h6><ul class="list-group">{% for f in folders %}<li class="list-group-item d-flex justify-content-between align-items-center"><a href="{{ url_for('files_view', folder=f.rel, as_user=view_user if view_user!=username else None) }}">{{ f.name }}</a><div><button class="btn btn-sm btn-outline-primary me-1" onclick="renamePrompt('{{ f.rel }}')">Rename</button><button class="btn btn-sm btn-outline-danger" onclick="deleteItem('{{ f.rel }}', true)">Delete</button></div></li>{% endfor %}</ul></div></div>
+  <div class="col-md-8"><div class="card p-2 mb-3"><h6>Files</h6><table class="table table-hover"><thead><tr><th>#</th><th>Preview</th><th>Name</th><th>Size</th><th>Actions</th></tr></thead><tbody>{% for file in items %}<tr><td>{{ loop.index }}</td><td>{% set ext=file.ext %}{% if ext in ['png','jpg','jpeg','gif','webp'] %}<img src="{{ url_for('uploaded_file', filename=file.rel, as_user=view_user if view_user!=username else None) }}" class="thumb preview-click" data-type="image" data-src="{{ url_for('uploaded_file', filename=file.rel, as_user=view_user if view_user!=username else None) }}">{% elif ext in ['mp4','webm','ogg','mov','mkv'] %}<button class="btn btn-sm btn-outline-secondary preview-click" data-type="video" data-src="{{ url_for('uploaded_file', filename=file.rel, as_user=view_user if view_user!=username else None) }}">Preview</button>{% else %}<svg width="40" height="28" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5z"/></svg>{% endif %}</td><td>{{ file.name }}</td><td>{{ human_readable(file.size) }}</td><td><a class="btn btn-sm btn-outline-primary me-1" href="{{ url_for('download_file', filename=file.rel, as_user=view_user if view_user!=username else None) }}">Download</a><button class="btn btn-sm btn-outline-primary me-1" onclick="renamePrompt('{{ file.rel }}')">Rename</button><button class="btn btn-sm btn-outline-danger" onclick="deleteItem('{{ file.rel }}', false)">Delete</button></td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+
+</main>
+
+<!-- Credits Section -->
+<div class="container text-center mt-4 mb-4">
+    <hr>
+    <p class="text-muted">
+        Developed by <a href="/static/landing_page_6_1760077771.html" target="_blank">DEV FIESTA</a> | Team Vertex
+    </p>
+</div>
+
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Preview</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="previewBody" style="min-height:300px"></div></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>const VIEW_USER = "{{ view_user }}"; function deleteItem(path,isFolder){ if(!confirm('Delete '+path+'?')) return; fetch('/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path,recursive:true,as_user:VIEW_USER})}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload(); else alert('Delete error: '+(j.error||'unknown')) }); } function renamePrompt(path){ const newName=prompt('New name for: '+path); if(!newName) return; fetch('/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:path,new_name:newName,as_user:VIEW_USER})}).then(r=>r.json()).then(j=>{ if(j.ok) location.reload(); else alert('Rename error: '+(j.error||j.msg||'unknown')) }); } document.addEventListener('DOMContentLoaded',()=>{ document.querySelectorAll('.preview-click').forEach(el=>el.addEventListener('click',()=>{ const type=el.dataset.type; const src=el.dataset.src; const body=document.getElementById('previewBody'); body.innerHTML=''; if(type==='image'){ const img=document.createElement('img'); img.src=src; img.style.maxWidth='100%'; body.appendChild(img); } else if(type==='video'){ const v=document.createElement('video'); v.controls=true; v.src=src; v.style.maxWidth='100%'; body.appendChild(v); } var modal=new bootstrap.Modal(document.getElementById('previewModal')); modal.show(); })); });</script>
+</body></html>

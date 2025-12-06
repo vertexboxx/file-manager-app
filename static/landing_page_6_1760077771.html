@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEV FIESTA: A Premier Collection of Development Resources</title>
+    <meta name="description" content="Dev Replica offers a curated selection of advanced tools and expansive websites for developers. Created by Pavan Sai Athipatla and team. Launching March 2026.">
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.7;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+
+        /* Header/Hero Section */
+        header {
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            color: white;
+            text-align: center;
+            padding: 120px 20px;
+        }
+        header h1 {
+            font-size: 3.5em;
+            font-weight: 300;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        header p {
+            font-size: 1.3em;
+            max-width: 700px;
+            margin: 0 auto;
+            opacity: 0.95;
+        }
+
+        /* Under Construction Notice */
+        .construction-notice {
+            background: #e2e8f0;
+            color: #4a5568;
+            text-align: center;
+            padding: 25px;
+            font-size: 1.1em;
+            border-bottom: 1px solid #cbd5e0;
+        }
+        .launch-info {
+            font-weight: 500;
+            color: #2d3748;
+            margin-top: 10px;
+        }
+
+        /* Main Content */
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        .intro {
+            text-align: center;
+            margin-bottom: 70px;
+        }
+        .intro h2 {
+            font-size: 2.8em;
+            font-weight: 300;
+            margin-bottom: 25px;
+            color: #2d3748;
+        }
+        .intro p {
+            font-size: 1.2em;
+            color: #718096;
+            max-width: 800px;
+            margin: 0 auto 30px;
+        }
+        .intro .highlight {
+            background: #edf2f7;
+            padding: 20px;
+            border-left: 4px solid #2c5282;
+            margin: 30px auto;
+            max-width: 600px;
+            font-style: italic;
+            color: #4a5568;
+        }
+
+        /* Team Section (Static Grid) */
+        .team {
+            margin-bottom: 60px;
+        }
+        .team h2 {
+            font-size: 2.5em;
+            font-weight: 300;
+            text-align: center;
+            margin-bottom: 40px;
+            color: #2d3748;
+        }
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+        .team-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+            text-align: center;
+            padding: 30px 20px;
+        }
+        .team-card:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+        .team-card .image {
+            height: 120px;
+            width: 120px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a0aec0;
+            font-size: 2.5em;
+            margin: 0 auto 20px;
+        }
+        .team-card h3 {
+            font-size: 1.4em;
+            font-weight: 400;
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+        .team-card .title {
+            font-size: 1em;
+            color: #718096;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        .team-card p {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+        .team-card .links {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .team-card .links a {
+            display: inline-block;
+            background: #e2e8f0;
+            color: #4a5568;
+            padding: 6px 12px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: background 0.3s ease;
+        }
+        .team-card .links a:hover {
+            background: #cbd5e0;
+        }
+        .team-card .links a.github::before {
+            content: '📂 ';
+        }
+        .team-card .links a.linkedin::before {
+            content: '💼 ';
+        }
+
+        /* Credits Section */
+        .credits {
+            text-align: center;
+            margin-bottom: 60px;
+            padding: 25px;
+            background: #edf2f7;
+            border-radius: 8px;
+            color: #4a5568;
+            font-style: italic;
+            font-weight: 500;
+            font-size: 1.05em;
+        }
+
+        /* Resource Preview Grid */
+        .resources-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+        }
+        .resource-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+        }
+        .resource-card:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+        .resource-card .preview {
+            width: 100%;
+            height: 220px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a0aec0;
+            font-size: 4em;
+        }
+        .resource-card-content {
+            padding: 30px;
+        }
+        .resource-card h3 {
+            font-size: 1.6em;
+            font-weight: 400;
+            margin-bottom: 12px;
+            color: #2d3748;
+        }
+        .resource-card p {
+            color: #718096;
+            margin-bottom: 20px;
+        }
+        .resource-card .status {
+            display: inline-block;
+            background: #e2e8f0;
+            color: #4a5568;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: background 0.3s ease;
+        }
+        .resource-card .status:hover {
+            background: #cbd5e0;
+        }
+
+        /* Footer */
+        footer {
+            background: #2d3748;
+            color: #e2e8f0;
+            text-align: center;
+            padding: 30px;
+            font-size: 0.95em;
+        }
+        footer a {
+            color: #a0aec0;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        footer a:hover {
+            color: white;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.5em;
+            }
+            .intro h2 {
+                font-size: 2.2em;
+            }
+            .team-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            .team-card {
+                padding: 20px 15px;
+            }
+            .resources-grid {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>DEV FIESTA</h1>
+        <p>Welcome to Dev fiesta, the premier gateway to a curated ensemble of innovative development tools and expansive websites, meticulously designed to empower and inspire professionals in the digital domain.</p>
+    </header>
+
+    <div class="construction-notice">
+        This platform is currently under development. We appreciate your patience as we refine our offerings to meet the highest standards.
+        <div class="launch-info">Expected Launch: March 2026</div>
+    </div>
+
+    <main>
+        <section class="intro">
+            <h2>Your Gateway to Development Mastery</h2>
+            <p>Dev Replica stands as the refined portal to an elite selection of surplus tools and comprehensive websites, each crafted with precision to advance developers in their quest for innovation and efficiency. This repository reflects a profound commitment to excellence, providing indispensable resources for navigating the complexities of modern software creation.</p>
+            <div class="highlight">
+                In the dynamic landscape of technology, Dev fiesta emerges as a steadfast ally, enabling the replication of proven methodologies and the forging of new frontiers in development.
+            </div>
+        </section>
+
+
+        <section class="resources-grid">
+            <!-- Preview cards – placeholders for future content -->
+            <div class="resource-card">
+                <div class="preview">🛠️</div>
+                <div class="resource-card-content">
+                    <h3>Surplus Tools Repository</h3>
+                    <p>A refined assortment of advanced utilities, including diagnostic instruments, automation frameworks, and productivity enhancers, tailored for discerning developers.</p>
+                    <a href="#" class="status">Available March 2026</a>
+                </div>
+            </div>
+
+            <div class="resource-card">
+                <div class="preview">🌐</div>
+                <div class="resource-card-content">
+                    <h3>Enormous Websites Archive</h3>
+                    <p>An extensive network of robust platforms offering profound explorations of web architectures, open-source integrations, and strategic development methodologies.</p>
+                    <a href="#" class="status">Available March 2026</a>
+                </div>
+            </div>
+
+            <div class="resource-card">
+                <div class="preview">🎥✍️</div>
+                <div class="resource-card-content">
+                    <h3>Cinematic Bites & Blogs</h3>
+                    <p>Cinematic Bites & Blogs brings you quick reviews and thoughtful explorations of movies, shows, and storytelling.
+From snack-sized takes to deep dives, it blends entertainment with insight.
+A space where cinema lovers find fresh perspectives beyond the screen.</p>
+                    <a href="#" class="status">Available March 2026</a>
+                </div>
+            </div>
+
+            <!-- Expand with additional cards as development progresses -->
+        </section>
+
+        <!-- Credits Section -->
+        <section class="credits">
+            Under the esteemed guidance of Mr.K.DHANAMJAY, TGT, whose profound mentorship has been instrumental in nurturing our team's capabilities and illuminating the path to innovation.
+
+        </section>
+
+        <!-- Team Section (Full Static Grid) -->
+        <section class="team">
+            <h2>Our Dedicated TEAM VERTEX</h2>
+            <div class="team-grid">
+                <!-- Founder -->
+                <div class="team-card">
+                    <div class="image">👤</div> <!-- Replace with <img src="pavan-photo.jpg" alt="Pavan Sai Athipatla" style="width:100%; height:100%; object-fit:cover; border-radius:50%;"> -->
+                    <h3>Pavan Sai Athipatla</h3>
+                    <div class="title">Founder,CEO & Lead Developer, DEV FIESTA</div>
+                    <p>Visionary architect guiding the initiative with strategic insight and a dedication to pioneering digital solutions.</p>
+                    <div class="links">
+                        <a href class="github">GitHub</a>
+                        <a href class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+
+                <!-- Backend Developer -->
+                <div class="team-card">
+                    <div class="image">🔧</div> <!-- Replace with <img src="haneesh-photo.jpg" alt="Ellanki Haneesh"> -->
+                    <h3>Ellanki Haneesh Chowdary</h3>
+                    <div class="title">Backend Developer</div>
+                    <p>Pioneering backend solutions with precision and foresight, ensuring robust foundations for scalable applications.</p>
+                    <div class="links">
+                        <a href class="github">GitHub</a>
+                        <a href class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+
+                <!-- Blog Editor -->
+                <div class="team-card">
+                    <div class="image">📝</div> <!-- Replace with <img src="manoj-photo.jpg" alt="Manoj Mobbineni"> -->
+                    <h3>Manoj Mobbineni</h3>
+                    <div class="title">Blog Editor</div>
+                    <p>Masterful editor distilling intricate technical narratives into compelling, accessible insights for the developer community.</p>
+                    <div class="links">
+                        <a href class="github">GitHub</a>
+                        <a href class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+
+                <!-- Web Deployer -->
+                <div class="team-card">
+                    <div class="image">🚀</div> <!-- Replace with <img src="hassen-photo.jpg" alt="Shaik Hassen"> -->
+                    <h3>Shaik Hassen</h3>
+                    <div class="title">Web Deployer & co-founder,DEV FIESTA</div>
+                    <p>Expert orchestrator of seamless deployments, optimizing infrastructure for unwavering reliability and growth.</p>
+                    <div class="links">
+                        <a href class="github">GitHub</a>
+                        <a href class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+
+                <!-- Frontend Developer -->
+                <div class="team-card">
+                    <div class="image">🎨</div> <!-- Replace with <img src="vishal-photo.jpg" alt="Ramineni Vishal"> -->
+                    <h3>Ramineni Vishal</h3>
+                    <div class="title">Frontend Developer</div>
+                    <p>Artisan of intuitive interfaces, harmonizing design and functionality to elevate user experiences with elegance.</p>
+                    <div class="links">
+                        <a href class="github">GitHub</a>
+                        <a href class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+
+                <!-- Frontend Developer & Tester -->
+                <div class="team-card">
+                    <div class="image">📝</div> <!-- Replace with <img src="nikesh-photo.jpg" alt="Nikesh Reddy"> -->
+                    <h3>Nikesh Reddy</h3>
+                    <div class="title">Frontend Developer & Tester</div>
+                    <p>Diligent craftsman and validator of frontend elements, upholding quality through meticulous testing and refinement.</p>
+                    <div class="links">
+                        <a hrefclass="github">GitHub</a>
+                        <a href="https://linkedin.com/in/nikesh" class="linkedin">LinkedIn</a>
+                    </div>
+                </div>
+                                    <!-- Frontend Developer & Tester -->
+                <div class="team-card">
+                    <div class="image">📝</div> <!-- Replace with <img src="nikesh-photo.jpg" alt="Nikesh Reddy"> -->
+                    <h3>ROHITH KUMAR REDDY</h3>
+                    <div class="title">DATA ANALYST</div>
+                    <p>Data Analyst with expertise in transforming raw data into actionable insights through statistical analysis, visualization, and reporting. Skilled in SQL, Excel, and Python to support data-driven decision-making..</p>
+                    <div class="links">
+                        <a hrefclass="github">GitHub</a>
+                        <a href="https://linkedin.com/in/nikesh" class="linkedin">LinkedIn</a>
+                 </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2023–2026 Dev fiesta. All rights reserved. | For professional inquiries or partnership discussions, reach out to us at <a href="mailto:devfiesta0a@gmail.com">devfiesta@gmail.com</a> | Created by TEAM VERTEX</p>
+    </footer>
+</body>
+</html>

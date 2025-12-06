@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+file_manager_final/file_app.db
+.env
+venv/
+env/
+.Python
+
+# IDEs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# node (if any)
+node_modules/
+
+# uploads / local files
+file_manager_final/uploads/
+file_manager_final/uploads_tmp/
+file_manager_final/downloads/
