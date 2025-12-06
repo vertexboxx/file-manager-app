@@ -5,6 +5,11 @@ from functools import wraps
 import sqlite3, os, json, shutil, mimetypes, re, uuid
 from datetime import datetime
 
+USE_S3 = True
+
+if USE_S3:
+    from s3_utils import upload_to_s3, download_from_s3, get_s3_url
+
 # Configuration
 USE_S3 = True   # <--- IMPORTANT
 
@@ -514,12 +519,44 @@ def complete_upload():
         except:
             pass
         return jsonify({"error":"size_mismatch", "final_size": final_size, "expected": total_size}), 500
-    os.replace(final_path + ".part", final_path)
+os.replace(final_path + ".part", final_path)
+
+# Build S3 object key: user/folder/file.ext
+folder_clean = folder.strip("/ ")
+if folder_clean:
+    object_key = f"{found_user}/{folder_clean}/{filename}"
+else:
+    object_key = f"{found_user}/{filename}"
+
+object_key = object_key.replace("//", "/")
+
+# Upload to S3
+if USE_S3:
+    ok = upload_to_s3(final_path, object_key)
+    if not ok:
+        return jsonify({"error": "s3_upload_failed"}), 500
+
+    # Delete local file after upload
     try:
-        shutil.rmtree(found)
+        os.remove(final_path)
     except:
         pass
-    return jsonify({"ok": True, "filename": filename, "folder": folder, "username": found_user})
+
+# Remove temp folder
+try:
+    shutil.rmtree(found)
+except:
+    pass
+
+return jsonify({
+    "ok": True,
+    "filename": filename,
+    "folder": folder,
+    "username": found_user,
+    "s3_key": object_key,
+    "s3_url": get_s3_url(object_key)
+})
+
 
 @app.route("/abort_upload", methods=["POST"])
 @login_required
