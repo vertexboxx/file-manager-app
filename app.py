@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import sqlite3, os, json, shutil, mimetypes, re, uuid
+import boto3
 from datetime import datetime
 
 USE_S3 = True
@@ -218,6 +219,19 @@ def index():
 @app.route("/files", methods=["GET"])
 @login_required
 def files_view():
+    # build s3 client
+    AWS_REGION = os.environ.get("AWS_REGION")
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    S3_BUCKET = os.environ.get("S3_BUCKET")
+
+    s3 = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
     current_user = session.get("username")
     if session.get("role") == "admin":
         view_user = request.args.get("as_user") or current_user
@@ -227,44 +241,69 @@ def files_view():
     else:
         view_user = current_user
 
-    folder = sanitize_folder(request.args.get("folder","").strip())
-    q = request.args.get("q","").strip().lower()
-    ftype = request.args.get("type","").strip().lower()
-    min_size = request.args.get("min_size","").strip()
-    max_size = request.args.get("max_size","").strip()
+    # folder from query, sanitized
+    folder = sanitize_folder(request.args.get("folder", "").strip())
+    q = request.args.get("q", "").strip().lower()
+    ftype = request.args.get("type", "").strip().lower()
+    min_size = request.args.get("min_size", "").strip()
+    max_size = request.args.get("max_size", "").strip()
 
-    try:
-        abs_folder = ensure_user_subpath(view_user, folder)
-    except ValueError:
-        flash("Invalid folder", "danger")
-        return redirect(url_for("files_view"))
+    # Build prefix. If folder empty -> prefix = "username/"
+    prefix = f"{view_user}/"
+    if folder:
+        prefix = f"{view_user}/{folder.strip('/')}/"
+    # Ensure prefix has no leading slashes
+    prefix = prefix.lstrip("/")
 
-    items = []
     folders = []
-    for entry in sorted(os.listdir(abs_folder)):
-        full = os.path.join(abs_folder, entry)
-        rel_entry = os.path.join(folder, entry).replace("\\\\", "/") if folder else entry
-        if os.path.isdir(full):
-            folders.append({"name": entry, "rel": rel_entry})
-        else:
-            try:
-                size = os.path.getsize(full)
-            except OSError:
-                size = 0
-            ext = entry.rsplit(".",1)[-1].lower() if "." in entry else ""
-            items.append({"name": entry, "rel": rel_entry, "size": size, "ext": ext})
+    items = []
 
-    # filters
+    # Use Delimiter='/' to receive "folders" (CommonPrefixes)
+    try:
+        resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix, Delimiter="/", MaxKeys=1000)
+    except Exception as e:
+        app.logger.exception("S3 list failed")
+        flash("Failed to list files (S3)", "danger")
+        return redirect(url_for("index"))
+
+    # extract folders (common prefixes)
+    for cp in resp.get("CommonPrefixes", []):
+        p = cp.get("Prefix", "")
+        # folder name relative to current folder
+        if p.startswith(prefix):
+            rel = p[len(prefix):].rstrip("/")
+            if rel:
+                folders.append({"name": rel, "rel": f"{folder}/{rel}".lstrip("/") if folder else rel})
+
+    # extract objects
+    for obj in resp.get("Contents", []):
+        key = obj.get("Key")
+        # skip "folder placeholder" (object with same key as prefix)
+        if key.endswith("/") and key == prefix:
+            continue
+        # compute name relative to current folder
+        name = key[len(prefix):] if key.startswith(prefix) else key
+        if not name:
+            continue
+        if "/" in name:
+            # object in a subfolder — skip (we only want objects directly in this folder)
+            continue
+        size = obj.get("Size", 0)
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        rel_entry = f"{folder}/{name}".lstrip("/") if folder else name
+        items.append({"name": name, "rel": rel_entry, "size": size, "ext": ext})
+
+    # Filters (q, type, min/max)
     if q:
         items = [it for it in items if q in it["name"].lower()]
         folders = [fo for fo in folders if q in fo["name"].lower()]
     if ftype:
         if ftype == "image":
-            items = [it for it in items if it["ext"] in ["png","jpg","jpeg","gif","webp"]]
+            items = [it for it in items if it["ext"] in ["png", "jpg", "jpeg", "gif", "webp"]]
         elif ftype == "video":
-            items = [it for it in items if it["ext"] in ["mp4","webm","ogg","mov","mkv"]]
+            items = [it for it in items if it["ext"] in ["mp4", "webm", "ogg", "mov", "mkv"]]
         elif ftype == "docs":
-            items = [it for it in items if it["ext"] in ["pdf","doc","docx","xls","xlsx","ppt","pptx","txt"]]
+            items = [it for it in items if it["ext"] in ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"]]
 
     try:
         if min_size:
@@ -274,21 +313,54 @@ def files_view():
     except:
         pass
 
-    usage = get_user_usage(view_user)
+    # usage: sum of sizes of objects under user's prefix (non-recursive quick estimate)
+    # for an accurate usage you'd want to iterate across all objects with Prefix=f"{view_user}/"
+    usage = 0
+    try:
+        # list up to 1000 objects; if you expect >1000, implement paginator
+        resp_all = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=f"{view_user}/", MaxKeys=1000)
+        for o in resp_all.get("Contents", []):
+            usage += o.get("Size", 0)
+    except Exception:
+        usage = 0
+
+    # breadcrumbs & parent
     breadcrumbs = []
     if folder:
         parts = folder.split("/")
         for i in range(len(parts)):
-            breadcrumbs.append( (parts[i], "/".join(parts[:i+1])) )
+            breadcrumbs.append((parts[i], "/".join(parts[:i+1])))
     parent = "/".join(folder.split("/")[:-1]) if folder and "/" in folder else ""
+
+    # all_folders (root-level folders for user)
     all_folders = []
     try:
-        all_folders = [d for d in os.listdir(user_root(view_user)) if os.path.isdir(os.path.join(user_root(view_user), d))]
-    except:
+        root_resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=f"{view_user}/", Delimiter="/", MaxKeys=1000)
+        for cp in root_resp.get("CommonPrefixes", []):
+            p = cp.get("Prefix", "")
+            rel = p[len(f"{view_user}/"):].rstrip("/")
+            if rel:
+                all_folders.append(rel)
+    except Exception:
         all_folders = []
-    users = list_all_usernames() if session.get("role") == "admin" else []
-    return render_template("files.html", username=session.get("username"), view_user=view_user, users=users, folders=folders, items=items, usage=usage, quota=MAX_STORAGE_BYTES, human_readable=human_readable, current_folder=folder, breadcrumbs=breadcrumbs, parent=parent, all_folders=all_folders)
 
+    users = list_all_usernames() if session.get("role") == "admin" else []
+
+    return render_template(
+        "files.html",
+        username=session.get("username"),
+        view_user=view_user,
+        users=users,
+        folders=folders,
+        items=items,
+        usage=usage,
+        quota=MAX_STORAGE_BYTES,
+        human_readable=human_readable,
+        current_folder=folder,
+        breadcrumbs=breadcrumbs,
+        parent=parent,
+        all_folders=all_folders
+    )
 # --- Folder ops ---
 @app.route("/create_folder", methods=["POST"])
 @login_required
@@ -317,32 +389,60 @@ def create_folder():
 @login_required
 def delete_item():
     data = request.get_json(force=True)
-    path = data.get("path","").strip()
+    path = data.get("path", "").strip()
     recursive = bool(data.get("recursive", False))
     as_user = data.get("as_user") if session.get("role") == "admin" else None
     target_user = as_user if as_user else session.get("username")
+
     if not path:
-        return jsonify({"error":"missing"}), 400
+        return jsonify({"error": "missing"}), 400
+
+    # Normalize path and build s3 key/prefix
+    safe_path = sanitize_folder(path)
+    # If the path looks like a folder (no extension) or recursive true, treat as prefix
+    is_folder_like = not os.path.splitext(safe_path)[1]
+    prefix = f"{target_user}/{safe_path}".rstrip("/")
+    if not prefix:
+        prefix = f"{target_user}"
+
+    # create s3 client
+    AWS_REGION = os.environ.get("AWS_REGION")
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    S3_BUCKET = os.environ.get("S3_BUCKET")
+    s3 = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
     try:
-        abs_path = ensure_user_subpath(target_user, path)
-    except ValueError:
-        return jsonify({"error":"invalid_path"}), 400
-    if os.path.isdir(abs_path):
-        if recursive:
-            shutil.rmtree(abs_path, ignore_errors=True)
+        # If deleting a folder (or recursive requested), remove all objects under prefix
+        if recursive or is_folder_like:
+            # Ensure prefix ends with '/'
+            prefix_key = prefix + "/"
+            # list objects
+            resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix_key)
+            if "Contents" not in resp:
+                return jsonify({"error": "not_found"}), 404
+            # batch delete (max 1000 per call)
+            to_delete = [{"Key": o["Key"]} for o in resp["Contents"]]
+            s3.delete_objects(Bucket=S3_BUCKET, Delete={"Objects": to_delete})
             return jsonify({"ok": True})
         else:
+            # single file delete
+            object_key = prefix  # already user/relpath/file.ext
+            # verify object exists (optional)
             try:
-                os.rmdir(abs_path)
-                return jsonify({"ok": True})
-            except OSError:
-                return jsonify({"error":"not_empty_or_failed"}), 400
-    else:
-        try:
-            os.remove(abs_path)
+                s3.head_object(Bucket=S3_BUCKET, Key=object_key)
+            except Exception:
+                return jsonify({"error": "not_found"}), 404
+            s3.delete_object(Bucket=S3_BUCKET, Key=object_key)
             return jsonify({"ok": True})
-        except OSError:
-            return jsonify({"error":"delete_failed"}), 500
+    except Exception as e:
+        app.logger.exception("S3 delete failed")
+        return jsonify({"error": "delete_failed", "msg": str(e)}), 500
 
 @app.route("/rename", methods=["POST"])
 @login_required
@@ -682,21 +782,51 @@ def uploaded_file(filename):
 def download_file(filename):
     as_user = request.args.get("as_user") if session.get("role") == "admin" else None
     target_user = as_user if as_user else session.get("username")
+
+    # sanitize and ensure path is valid (ensure_user_subpath checks path traversal)
     try:
+        # we still call ensure_user_subpath to validate folder paths (it will create folder if missing)
         abs_path = ensure_user_subpath(target_user, filename)
     except ValueError:
         flash("Invalid file path", "danger")
         return redirect(url_for("files_view"))
-    if not os.path.isfile(abs_path):
-        flash("File not found", "danger")
-        return redirect(url_for("files_view"))
-    ddir = user_download_dir(target_user)
-    dest = os.path.join(ddir, os.path.basename(abs_path))
+
+    # build s3 object key
+    object_key = f"{target_user}/{filename}".lstrip("/")
+
+    # create s3 client
+    AWS_REGION = os.environ.get("AWS_REGION")
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    S3_BUCKET = os.environ.get("S3_BUCKET")
+    s3 = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
+    # try to generate presigned URL and redirect
     try:
-        shutil.copy2(abs_path, dest)
-    except:
-        pass
-    return send_file_partial(dest, as_attachment=True, download_name=os.path.basename(abs_path))
+        presigned = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_BUCKET, "Key": object_key},
+            ExpiresIn=3600,
+        )
+        return redirect(presigned)
+    except Exception as e:
+        app.logger.exception("Presign/download failed, falling back to local copy if present")
+        # Fallback: try local copy (if somehow present)
+        if os.path.isfile(abs_path):
+            ddir = user_download_dir(target_user)
+            dest = os.path.join(ddir, os.path.basename(abs_path))
+            try:
+                shutil.copy2(abs_path, dest)
+                return send_file_partial(dest, as_attachment=True, download_name=os.path.basename(abs_path))
+            except Exception:
+                pass
+        flash("File not available for download", "danger")
+        return redirect(url_for("files_view"))
 
 @app.route("/download_all")
 @login_required
