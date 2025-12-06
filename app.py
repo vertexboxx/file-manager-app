@@ -6,6 +6,10 @@ import sqlite3, os, json, shutil, mimetypes, re, uuid
 from datetime import datetime
 
 # Configuration
+USE_S3 = True   # <--- IMPORTANT
+
+if USE_S3:
+    from s3_utils import upload_to_s3, download_from_s3, generate_s3_url
 MAX_STORAGE_BYTES = 32 * 1024**3  # 32 GiB per user
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_ROOT = os.path.join(BASE_DIR, "uploads")
