@@ -26,6 +26,14 @@ def upload_to_s3(local_path, object_key):
         print("S3 upload error:", e)
         return False
 
+def get_s3_url(object_key):
+    """Return a simple public S3 URL for the object (or None if no key)."""
+    if not object_key:
+        return None
+    bucket = S3_BUCKET
+    region = AWS_REGION or "ap-south-1"
+    return f"https://{bucket}.s3.{region}.amazonaws.com/{object_key}"
+
 def download_from_s3(object_key, dest_path):
     """Download an object from S3 to dest_path. Returns True on success."""
     try:
